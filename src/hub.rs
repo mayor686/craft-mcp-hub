@@ -280,6 +280,15 @@ pub fn state(app: &App, registered: &Snapshot) -> AppState {
 
 /// The state of an app that is registered: what its server is doing.
 fn running_state(app: &App, probe: Probe) -> AppState {
+    if Config::load().direct {
+        let cmd = proc::display_command(&app.engine_command().unwrap_or_default());
+        return AppState::new(
+            StateKind::On,
+            "On",
+            "direct stdio",
+            format!("Direct stdio mode (no background server): clients launch {cmd}"),
+        );
+    }
     match probe {
         Probe::Down => AppState::new(StateKind::Waiting, "Waiting", "starts with the next session", "No server is running: the next client session starts it."),
         Probe::Foreign(who) => {
@@ -542,8 +551,10 @@ pub fn turn_on(id: &str) -> Result<(), String> {
         app = add(id, AddOptions::default())?;
     }
     let config = Config::load();
-    if let Some(conflict) = port_conflict(&config, id, app.port) {
-        return Err(conflict);
+    if !config.direct {
+        if let Some(conflict) = port_conflict(&config, id, app.port) {
+            return Err(conflict);
+        }
     }
     let enabled = clients::enabled(&config);
     if enabled.is_empty() {
@@ -553,7 +564,13 @@ pub fn turn_on(id: &str) -> Result<(), String> {
     if failures.len() == enabled.len() {
         return Err(failures.join("\n"));
     }
-    start_server(&app)?;
+    if config.direct {
+        if app.port != 0 {
+            control::shutdown(app.port, id);
+        }
+    } else {
+        start_server(&app)?;
+    }
     if failures.is_empty() {
         Ok(())
     } else {
@@ -772,9 +789,41 @@ pub fn set_roots(id: &str, dirs: &[String]) -> Result<(), String> {
         saved.roots = Some(dirs.to_vec());
         saved.root = None;
     })?;
+    let config = Config::load();
+    if config.direct && clients::registered_anywhere(id) {
+        for client in clients::enabled(&config) {
+            let _ = client.unregister(id);
+            let _ = client.register(id);
+        }
+        return Ok(());
+    }
     match Hub::load().app(id) {
         Some(changed) if was_running(&changed) => start_server(&changed),
         _ => Ok(()),
+    }
+}
+
+/// Switches between Direct stdio mode (`direct = true`, no background daemon) and Shared Hub mode (`direct = false`).
+pub fn set_mode(direct: bool) -> Result<String, String> {
+    let hub = Hub::load();
+    let active: Vec<String> = hub.apps().into_iter().filter(|app| clients::registered_anywhere(&app.id)).map(|app| app.id).collect();
+    let mut config = hub.config;
+    config.direct = direct;
+    config.save()?;
+    let mut errors = Vec::new();
+    for id in &active {
+        for client in clients::all() {
+            let _ = client.unregister(id);
+        }
+        if let Err(why) = turn_on(id) {
+            errors.push(format!("{id}: {why}"));
+        }
+    }
+    let mode_name = if direct { "direct stdio (no background server)" } else { "shared hub server" };
+    if errors.is_empty() {
+        Ok(format!("Mode set to {mode_name} ({} active app(s) updated).", active.len()))
+    } else {
+        Err(format!("Mode set to {mode_name}, with warnings:\n{}", errors.join("\n")))
     }
 }
 
@@ -786,10 +835,13 @@ pub fn remove(id: &str) -> Result<(), String> {
     config.save()
 }
 
-/// A full MCP round trip through the app's server. A registered app whose server is waiting for
-/// a session is started first, so the check says whether it really comes up.
+/// A full MCP round trip through the app's server (or directly via stdio in direct mode).
 pub fn check(id: &str) -> Result<CheckOk, String> {
     let app = Hub::load().app(id).ok_or_else(|| unknown(id))?;
+    if Config::load().direct {
+        let cmd = app.engine_command().ok_or_else(|| format!("{} is not installed.", app.name))?;
+        return control::check_direct(&cmd);
+    }
     if matches!(control::status(app.port), Probe::Down) && app.installed() && app.configured {
         start_server(&app)?;
     }

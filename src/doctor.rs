@@ -169,7 +169,11 @@ fn client(app: &App, out: &mut Vec<String>, todo: &mut Vec<String>) -> bool {
         match client.registered().map(|servers| clients::registration(&servers, &app.id)) {
             None => out.push(format!("[??]  Client    {}: its settings ({}) could not be read", client.name, client.settings_file().display())),
             Some(Registration::Ours) => {
-                out.push(format!("[OK]  Client    {}: registered, sessions connect to port {}", client.name, app.port));
+                if Config::load().direct {
+                    out.push(format!("[OK]  Client    {}: registered (direct stdio mode)", client.name));
+                } else {
+                    out.push(format!("[OK]  Client    {}: registered, sessions connect to port {}", client.name, app.port));
+                }
                 registered = true;
             }
             Some(Registration::Missing) => {
@@ -190,6 +194,14 @@ fn client(app: &App, out: &mut Vec<String>, todo: &mut Vec<String>) -> bool {
 
 /// Reports the server and its engine. Returns the engine's last stderr lines.
 fn server(app: &App, registered: bool, out: &mut Vec<String>, todo: &mut Vec<String>) -> Vec<String> {
+    if Config::load().direct {
+        out.push("[OK]  Mode      direct stdio (AI clients launch the app's CLI directly; no background server needed)".to_string());
+        match hub::check(&app.id) {
+            Ok(ok) => out.push(format!("[OK]  MCP test  {} tools in {} ms ({})", ok.tools, ok.millis, ok.server)),
+            Err(why) => out.push(format!("[XX]  MCP test  {why}")),
+        }
+        return Vec::new();
+    }
     let port = app.port;
     let status = match control::status(port) {
         Probe::Down => {

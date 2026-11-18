@@ -232,3 +232,75 @@ pub fn check(port: u16) -> Result<CheckOk, String> {
         server: init.get("result").and_then(Value::as_object).map(rpc::server_label).unwrap_or_default(),
     })
 }
+
+/// A full MCP round trip directly against the app's command-line tool over stdio (direct mode).
+pub fn check_direct(command_line: &[String]) -> Result<CheckOk, String> {
+    use std::path::Path;
+    use std::process::{Command, Stdio};
+
+    let started = Instant::now();
+    let Some((program, args)) = command_line.split_first() else {
+        return Err("no engine command".to_string());
+    };
+    let mut command = Command::new(program);
+    command.args(args).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null());
+    if let Some(dir) = Path::new(program).parent().filter(|d| d.is_dir()) {
+        command.current_dir(dir);
+    }
+    let mut child = proc::quiet(&mut command).spawn().map_err(|e| format!("could not start {program}: {e}"))?;
+    let (Some(mut stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
+        let _ = child.kill();
+        return Err("could not open engine stdio pipes".to_string());
+    };
+    let init_req = json!({
+        "jsonrpc": "2.0",
+        "id": "check-1",
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": { "name": "crafthub-check", "version": crate::VERSION }
+        }
+    });
+    let initialized = json!({ "jsonrpc": "2.0", "method": "notifications/initialized" });
+    let tools_req = json!({ "jsonrpc": "2.0", "id": "check-2", "method": "tools/list", "params": {} });
+    let payload = format!("{init_req}\n{initialized}\n{tools_req}\n");
+    if stdin.write_all(payload.as_bytes()).is_err() || stdin.flush().is_err() {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err("could not write MCP initialize to engine stdin".to_string());
+    }
+    let mut reader = BufReader::new(stdout);
+    let mut server = String::new();
+    let mut tools_count = None;
+    let mut err_msg = None;
+    while let Some(line) = read_line(&mut reader) {
+        let Ok(value) = serde_json::from_str::<Value>(&line) else { continue };
+        match value.get("id").and_then(Value::as_str) {
+            Some("check-1") => {
+                if let Some(err) = value.get("error") {
+                    err_msg = Some(err.get("message").and_then(Value::as_str).unwrap_or("initialize error").to_string());
+                    break;
+                }
+                server = value.get("result").and_then(Value::as_object).map(rpc::server_label).unwrap_or_default();
+            }
+            Some("check-2") => {
+                if let Some(err) = value.get("error") {
+                    err_msg = Some(err.get("message").and_then(Value::as_str).unwrap_or("tools/list error").to_string());
+                    break;
+                }
+                tools_count = Some(value.get("result").and_then(|r| r.get("tools")).and_then(Value::as_array).map_or(0, Vec::len));
+                break;
+            }
+            _ => {}
+        }
+    }
+    drop(stdin);
+    let _ = child.kill();
+    let _ = child.wait();
+    if let Some(why) = err_msg {
+        return Err(why);
+    }
+    let tools = tools_count.ok_or_else(|| "engine exited before answering tools/list".to_string())?;
+    Ok(CheckOk { tools, millis: started.elapsed().as_millis(), server })
+}

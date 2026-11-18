@@ -1,8 +1,12 @@
 # Changelog
 
-## 0.6.1
+## 0.7.0
 
-- **New versions are announced.** The control panel says when a newer Craft MCP Hub is out, with buttons to open its release on GitHub and to copy the update command. `crafthub update-check` asks from the command line, and `crafthub list` mentions a newer version too. GitHub is asked at most once a day; `CRAFTHUB_NO_UPDATE_CHECK=1` turns it off.
+- **Windows ArtCraft & Storytold suite discovery fixed.** Finds apps installed under `C:\Program Files\ArtCraft\<App>`, `%LOCALAPPDATA%\Programs\ArtCraft\<App>`, `%LOCALAPPDATA%\ArtCraft\<App>`, and `bin` subfolders in addition to standalone folders.
+- **Direct stdio mode (`crafthub mode direct`).** Option to register `<app>-cli mcp` directly in AI clients without running background TCP server daemons, toggleable via `crafthub mode direct|hub` or the control panel header checkbox.
+- **Additional AI coding agents built in.** Added native support for **Antigravity**, **Gemini CLI**, **Windsurf**, and **Cline** alongside Claude Code, Claude Desktop, Cursor, VS Code, and Codex, plus direct `.claude.json` fallback when the `claude` CLI is not on `PATH`.
+- **Verified profiles & AutoCraft support.** Added verified profiles for `cadcraft` and `solidcraft` (`--allow-path`) and added `autocraft` (`storytold/autocraft`) to the built-in catalog.
+- **Privacy.** Removed automatic background update checks on panel startup.
 
 ## 0.6.0
 

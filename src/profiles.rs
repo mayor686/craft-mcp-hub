@@ -94,6 +94,9 @@ fn from_help(help: &str) -> Profile {
         // How the tools that take several folders say so.
         profile.multi_root = ["more than once", "Repeat either flag", "repeatable"].iter().any(|phrase| help.contains(phrase));
         profile.root_required = help.contains("an omitted root denies");
+    } else if help.contains("--allow-path") {
+        profile.root_flags = vec!["--allow-path".to_string()];
+        profile.multi_root = help.contains("--allow-path DIR]...");
     }
     profile
 }

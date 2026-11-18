@@ -285,3 +285,18 @@ mac_team = ""
 color = [15, 104, 240]
 former_ids = []
 former_names = []
+
+[[apps]]
+id = "autocraft"
+name = "AutoCraft"
+binary = "autocraft"
+tagline = "Workflow and desktop automation"
+kind = "official"
+publisher = "ArtCraft"
+mac_bundle_name = "AutoCraft"
+flatpak_id = "ai.storyteller.autocraft"
+repo = "storytold/autocraft"
+mac_team = "DJ6XS33FX8"
+color = [96, 125, 249]
+former_ids = []
+former_names = []

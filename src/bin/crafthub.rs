@@ -108,6 +108,11 @@ enum Command {
     },
     /// Open the control panel window
     Panel,
+    /// Show or switch how AI clients connect: `direct` (stdio directly to <app>-cli, no daemon) or `hub` (shared background server)
+    Mode {
+        /// `direct` or `hub`
+        mode: Option<String>,
+    },
     /// Fetch the command-line tools of the apps installed without one (macOS: the ArtCraft launcher
     /// installs only the desktop apps), and update the ones fetched for an older version
     Tools {
@@ -202,6 +207,7 @@ fn main() -> ExitCode {
         }
         Command::Snippet { app, format } => snippet(app, &format),
         Command::Panel => panel(),
+        Command::Mode { mode } => set_or_show_mode(mode.as_deref()),
         Command::Tools { app } => tools(app.as_deref()),
         Command::Uninstall { yes } => uninstall_hub(yes),
         Command::UpdateCheck => update_check_now(),
@@ -312,6 +318,8 @@ fn list(only: Option<&str>, as_json: bool) -> bool {
         return true;
     }
     let client_names: Vec<&str> = registered.clients().map(|client| client.name).collect();
+    let mode_label = if hub.config.direct { "direct stdio (no background server)" } else { "shared hub server" };
+    println!("Mode: {mode_label}");
     if client_names.is_empty() {
         println!("AI clients: none enabled (`crafthub clients` lists them)\n");
     } else {
@@ -649,6 +657,45 @@ fn panel() -> bool {
         Ok(_) => true,
         Err(e) => {
             eprintln!("Could not open the control panel: {e}");
+            false
+        }
+    }
+}
+
+fn set_or_show_mode(mode: Option<&str>) -> bool {
+    match mode {
+        None => {
+            let direct = Config::load().direct;
+            if direct {
+                println!("Current mode: direct (AI clients launch `<app>-cli mcp` directly on stdio; no background server).");
+            } else {
+                println!("Current mode: hub (AI clients connect to a shared background server per app).");
+            }
+            println!("Switch with `crafthub mode direct` or `crafthub mode hub`.");
+            true
+        }
+        Some("direct") => match hub::set_mode(true) {
+            Ok(msg) => {
+                println!("{msg}");
+                true
+            }
+            Err(why) => {
+                eprintln!("{why}");
+                false
+            }
+        },
+        Some("hub") => match hub::set_mode(false) {
+            Ok(msg) => {
+                println!("{msg}");
+                true
+            }
+            Err(why) => {
+                eprintln!("{why}");
+                false
+            }
+        },
+        Some(other) => {
+            eprintln!("Unknown mode `{other}`: use `direct` or `hub`.");
             false
         }
     }

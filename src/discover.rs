@@ -30,16 +30,36 @@ fn cli_names(app: &CatalogApp) -> Vec<String> {
 
 /// The names the app's install folder may have.
 fn folder_names(app: &CatalogApp) -> Vec<String> {
-    unique([app.name.clone(), app.mac_bundle_name.clone()].into_iter().chain(app.former_names.iter().cloned()))
+    unique(
+        [app.name.clone(), app.mac_bundle_name.clone(), app.id.clone(), app.binary.clone()]
+            .into_iter()
+            .chain(app.former_names.iter().cloned())
+            .chain(app.former_ids.iter().cloned()),
+    )
 }
 
 #[cfg(windows)]
 fn install_dirs(app: &CatalogApp) -> Vec<PathBuf> {
     let mut bases: Vec<PathBuf> = ["ProgramFiles", "ProgramW6432", "ProgramFiles(x86)"].iter().filter_map(std::env::var_os).map(PathBuf::from).collect();
     bases.push(paths::local_data_dir().join("Programs"));
+    bases.push(paths::local_data_dir());
     bases.dedup();
     let names = folder_names(app);
-    bases.iter().flat_map(|base| names.iter().map(move |name| base.join(name))).collect()
+    let mut dirs = Vec::new();
+    for base in &bases {
+        for suite in ["ArtCraft", "Storytold"] {
+            let suite_dir = base.join(suite);
+            for name in &names {
+                dirs.push(suite_dir.join(name));
+                dirs.push(suite_dir.join(name).join("bin"));
+            }
+        }
+        for name in &names {
+            dirs.push(base.join(name));
+            dirs.push(base.join(name).join("bin"));
+        }
+    }
+    dirs
 }
 
 #[cfg(target_os = "macos")]

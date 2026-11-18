@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fs;
 
-pub const RELEASES_URL: &str = "https://github.com/AndrianLeah/craft-mcp-hub/releases";
+pub const RELEASES_URL: &str = "https://github.com/mayor686/craft-mcp-hub/releases";
 const CHECK_EVERY_SECS: u64 = 24 * 60 * 60;
 
 /// A release newer than this program.
@@ -121,9 +121,9 @@ pub fn known_newer() -> Option<Newer> {
 /// How to update on this system: the install command again.
 pub fn how_to_update() -> &'static str {
     if cfg!(windows) {
-        "irm https://raw.githubusercontent.com/AndrianLeah/craft-mcp-hub/main/install.ps1 | iex"
+        "irm https://raw.githubusercontent.com/mayor686/craft-mcp-hub/main/install.ps1 | iex"
     } else {
-        "curl -fsSL https://raw.githubusercontent.com/AndrianLeah/craft-mcp-hub/main/install.sh | sh"
+        "curl -fsSL https://raw.githubusercontent.com/mayor686/craft-mcp-hub/main/install.sh | sh"
     }
 }
 
@@ -156,6 +156,6 @@ mod tests {
         assert_eq!(newer_than_this(VERSION), None);
         assert_eq!(newer_than_this("0.0.1"), None);
         let newer = newer_than_this("99.0.0").expect("a newer release");
-        assert_eq!(newer.url, "https://github.com/AndrianLeah/craft-mcp-hub/releases/tag/v99.0.0");
+        assert_eq!(newer.url, "https://github.com/mayor686/craft-mcp-hub/releases/tag/v99.0.0");
     }
 }

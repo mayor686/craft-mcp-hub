@@ -85,7 +85,6 @@ probe = true
 
 [cadcraft]
 port = 7816
-probe = true
 
 [texturecraft]
 port = 7817
@@ -97,10 +96,16 @@ probe = true
 
 [solidcraft]
 port = 7819
-probe = true
+args = ["mcp", "--headless"]
+root_flags = ["--allow-path"]
+multi_root = true
 
 [mailcraft]
 port = 7820
+probe = true
+
+[autocraft]
+port = 7822
 probe = true
 
 # Apps from assets/extra-apps.toml.

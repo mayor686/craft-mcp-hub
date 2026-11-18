@@ -1,10 +1,10 @@
 [package]
 name = "craft-mcp-hub"
-version = "0.6.1"
+version = "0.7.0"
 edition = "2021"
 description = "Unofficial MCP hub for the ArtCraft app suite: one shared, windowless MCP server per app, for every AI client session."
 license = "MIT"
-repository = "https://github.com/AndrianLeah/craft-mcp-hub"
+repository = "https://github.com/mayor686/craft-mcp-hub"
 default-run = "crafthub"
 
 [lib]

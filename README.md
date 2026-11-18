@@ -2,9 +2,9 @@
 
 # Craft MCP Hub
 
-[![CI](https://github.com/AndrianLeah/craft-mcp-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/AndrianLeah/craft-mcp-hub/actions/workflows/ci.yml)
+[![CI](https://github.com/mayor686/craft-mcp-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/mayor686/craft-mcp-hub/actions/workflows/ci.yml)
 
-One shared, windowless MCP server per [ArtCraft](https://getartcraft.com) app, for every AI client session.
+One shared, windowless MCP server (or direct `stdio` configuration) per [ArtCraft / Storytold](https://github.com/storytold) app, for every AI coding agent.
 
 > Unofficial. This project is not affiliated with ArtCraft or its apps.
 
@@ -26,9 +26,11 @@ AI client session ──stdio──▶ crafthub connect photocraft ─┼─▶ 
 control panel / crafthub ────────────────────────────────┘        (127.0.0.1:7801)            (one engine)
 ```
 
-- It works with Claude Code, Claude Desktop, Cursor, VS Code and Codex; sessions of all of them share the same engine.
-- `crafthub connect <app>` is what the client launches. It starts the app's server if none is running, so nothing has to be open beforehand, and reconnects on its own when the server restarts.
-- `crafthub serve <app>` is the shared server. It keeps the engine running, forwards each session's requests and returns the answers to whoever asked.
+- It works out of the box with **Claude Code**, **Claude Desktop**, **Cursor**, **VS Code**, **Codex**, **Antigravity**, **Gemini CLI**, **Windsurf**, and **Cline**.
+- **Two modes (`crafthub mode direct` / `crafthub mode hub`):**
+  - **Direct `stdio` mode (`crafthub mode direct`):** Registers `<app>-cli mcp` directly in your AI clients' configuration files without running any background TCP servers.
+  - **Shared Hub mode (`crafthub mode hub`, default):** `crafthub connect <app>` connects every client session to one shared `crafthub serve <app>` engine on `127.0.0.1:<port>`.
+- Automatically detects ArtCraft apps installed in `C:\Program Files\ArtCraft\<App>`, `C:\Program Files\<App>`, and `%LOCALAPPDATA%\Programs\ArtCraft\<App>`.
 - The list of apps comes from the ArtCraft launcher's own catalog, so a new app shows up as soon as the launcher knows it. Apps the launcher doesn't list yet can be in the hub's own list, [`assets/extra-apps.toml`](assets/extra-apps.toml) (for now [ShapeCraft](https://github.com/jackharvest/shapecraft)). An entry there steps aside by itself once its app joins the launcher, and a pull request adding one is welcome.
 
 ## Install
@@ -38,16 +40,16 @@ You need at least one [ArtCraft](https://getartcraft.com) app installed, and an 
 **Windows** 10 or 11, 64-bit (PowerShell):
 
 ```powershell
-irm https://raw.githubusercontent.com/AndrianLeah/craft-mcp-hub/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/mayor686/craft-mcp-hub/main/install.ps1 | iex
 ```
 
 **macOS** (Apple silicon or Intel) and **Linux** (x86_64):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/AndrianLeah/craft-mcp-hub/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/mayor686/craft-mcp-hub/main/install.sh | sh
 ```
 
-The script downloads the [latest release](https://github.com/AndrianLeah/craft-mcp-hub/releases/latest), checks it against the checksum published with it, and puts `crafthub` and `crafthub-panel` in `%USERPROFILE%\.crafthub\bin` on Windows (added to your PATH, with a Start menu shortcut for the panel) or in `~/.local/bin` on macOS and Linux. On macOS the control panel is also installed as the app **Craft MCP Hub** in Applications (Launchpad and Spotlight find it), and the programs in `~/.local/bin` point into it. It needs no administrator rights. Both scripts are short enough to read first: [`install.ps1`](install.ps1), [`install.sh`](install.sh).
+The script downloads the [latest release](https://github.com/mayor686/craft-mcp-hub/releases/latest), checks it against the checksum published with it, and puts `crafthub` and `crafthub-panel` in `%USERPROFILE%\.crafthub\bin` on Windows (added to your PATH, with a Start menu shortcut for the panel) or in `~/.local/bin` on macOS and Linux. On macOS the control panel is also installed as the app **Craft MCP Hub** in Applications (Launchpad and Spotlight find it), and the programs in `~/.local/bin` point into it. It needs no administrator rights. Both scripts are short enough to read first: [`install.ps1`](install.ps1), [`install.sh`](install.sh).
 
 The programs aren't code-signed. Installing with the commands above avoids the "unknown publisher" warnings, because those are only shown for files downloaded with a browser. If you download a release by hand, Windows asks once ("More info" → "Run anyway") and macOS needs System Settings → Privacy & Security → "Open Anyway".
 

@@ -63,7 +63,7 @@ pub struct Client {
 
 pub const CLAUDE_CODE: &str = "claude-code";
 
-static BUILT_IN: [Client; 5] = [
+static BUILT_IN: [Client; 9] = [
     Client { id: CLAUDE_CODE, name: "Claude Code", kind: Kind::ClaudeCode, file: Location::Known(claude_config_file), needs_restart: false },
     Client {
         id: "claude-desktop",
@@ -75,6 +75,34 @@ static BUILT_IN: [Client; 5] = [
     Client { id: "cursor", name: "Cursor", kind: Kind::Json { key: "mcpServers", typed: true }, file: Location::Known(cursor_file), needs_restart: false },
     Client { id: "vscode", name: "VS Code", kind: Kind::Json { key: "servers", typed: true }, file: Location::Known(vscode_file), needs_restart: false },
     Client { id: "codex", name: "Codex", kind: Kind::Toml { key: "mcp_servers" }, file: Location::Known(codex_file), needs_restart: true },
+    Client {
+        id: "antigravity",
+        name: "Antigravity",
+        kind: Kind::Json { key: "mcpServers", typed: false },
+        file: Location::Known(antigravity_file),
+        needs_restart: false,
+    },
+    Client {
+        id: "gemini-cli",
+        name: "Gemini CLI",
+        kind: Kind::Json { key: "mcpServers", typed: false },
+        file: Location::Known(gemini_cli_file),
+        needs_restart: true,
+    },
+    Client {
+        id: "windsurf",
+        name: "Windsurf",
+        kind: Kind::Json { key: "mcpServers", typed: false },
+        file: Location::Known(windsurf_file),
+        needs_restart: false,
+    },
+    Client {
+        id: "cline",
+        name: "Cline",
+        kind: Kind::Json { key: "mcpServers", typed: false },
+        file: Location::Known(cline_file),
+        needs_restart: false,
+    },
 ];
 
 pub fn is_built_in(id: &str) -> bool {
@@ -171,6 +199,28 @@ fn codex_file() -> PathBuf {
     home.join("config.toml")
 }
 
+fn antigravity_file() -> PathBuf {
+    paths::home_dir().join(".gemini").join("antigravity").join("mcp_config.json")
+}
+
+fn gemini_cli_file() -> PathBuf {
+    paths::home_dir().join(".gemini").join("settings.json")
+}
+
+fn windsurf_file() -> PathBuf {
+    paths::home_dir().join(".codeium").join("windsurf").join("mcp_config.json")
+}
+
+fn cline_file() -> PathBuf {
+    paths::app_config_dir()
+        .join("Code")
+        .join("User")
+        .join("globalStorage")
+        .join("saoudrizwan.claude-dev")
+        .join("settings")
+        .join("cline_mcp_settings.json")
+}
+
 /// The newest file called `name` exactly `depth` folders below `base`.
 fn newest_below(base: &Path, depth: usize, name: &str) -> Option<PathBuf> {
     fn walk(dir: &Path, depth: usize, name: &str, found: &mut Vec<PathBuf>) {
@@ -221,9 +271,23 @@ pub fn find_claude() -> Option<PathBuf> {
 
 // ---------------------------------------------------------------- one client
 
+/// The command and arguments a client must run for `app` (either `<app>-cli mcp ...` in direct
+/// mode or `crafthub connect <app>` in shared hub mode).
+fn target_command(app: &str) -> (String, Vec<String>) {
+    if Config::load().direct {
+        if let Some(cmd) = crate::hub::Hub::load().app(app).and_then(|a| a.engine_command()) {
+            if let Some((prog, args)) = cmd.split_first() {
+                return (prog.clone(), args.to_vec());
+            }
+        }
+    }
+    (paths::hub_exe().to_string_lossy().into_owned(), vec!["connect".to_string(), app.to_string()])
+}
+
 /// What a client must be given to reach the app, in the common `mcpServers` shape.
 pub fn entry(app: &str) -> Value {
-    json!({ "type": "stdio", "command": paths::hub_exe().to_string_lossy(), "args": ["connect", app], "env": {} })
+    let (command, args) = target_command(app);
+    json!({ "type": "stdio", "command": command, "args": args, "env": {} })
 }
 
 fn same_file(a: &str, b: &Path) -> bool {
@@ -233,7 +297,42 @@ fn same_file(a: &str, b: &Path) -> bool {
     same_text || matches!((fs::canonicalize(a), fs::canonicalize(b)), (Ok(x), Ok(y)) if x == y)
 }
 
+fn is_direct_registration(servers: &Map<String, Value>, app: &str) -> bool {
+    let Some(server) = servers.get(app) else { return false };
+    let command = server.get("command").and_then(Value::as_str).unwrap_or("");
+    let args: Vec<&str> = server.get("args").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+    if args.first() != Some(&"mcp") {
+        return false;
+    }
+    if let Some(cmd) = crate::hub::Hub::load().app(app).and_then(|a| a.engine_command()) {
+        if let Some(prog) = cmd.first() {
+            let expected_args: Vec<&str> = cmd[1..].iter().map(String::as_str).collect();
+            return same_file(command, Path::new(prog)) && args == expected_args;
+        }
+    }
+    let stem = Path::new(command).file_stem().map(|s| s.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    stem == format!("{app}-cli")
+}
+
+fn is_any_ours(servers: &Map<String, Value>, app: &str) -> bool {
+    if registration_for(servers, app, &paths::hub_exe()) == Registration::Ours || is_direct_registration(servers, app) {
+        return true;
+    }
+    let Some(server) = servers.get(app) else { return false };
+    let command = server.get("command").and_then(Value::as_str).unwrap_or("");
+    let stem = Path::new(command).file_stem().map(|s| s.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    stem == format!("{app}-cli")
+}
+
 pub fn registration(servers: &Map<String, Value>, app: &str) -> Registration {
+    if Config::load().direct {
+        if is_direct_registration(servers, app) {
+            return Registration::Ours;
+        }
+        if registration_for(servers, app, &paths::hub_exe()) == Registration::Ours {
+            return Registration::Other("crafthub (hub mode)".to_string());
+        }
+    }
     registration_for(servers, app, &paths::hub_exe())
 }
 
@@ -301,22 +400,25 @@ impl Client {
         if self.registration(app) == Some(Registration::Ours) {
             return Ok(());
         }
-        let command = paths::hub_exe().to_string_lossy().into_owned();
+        let (command, args) = target_command(app);
         match self.kind {
-            Kind::ClaudeCode => register_in_claude_code(app),
-            Kind::Json { key, typed } => self.edit(|text| add_to_json(text, key, app, &command, typed)),
-            Kind::Toml { key } => self.edit(|text| add_to_toml(text, key, app, &command)),
+            Kind::ClaudeCode => register_in_claude_code(app, &command, &args),
+            Kind::Json { key, typed } => self.edit(|text| add_to_json_with_args(text, key, app, &command, &args, typed)),
+            Kind::Toml { key } => self.edit(|text| add_to_toml_with_args(text, key, app, &command, &args)),
         }
     }
 
     /// Removes the app from the client, if this hub registered it there. Someone else's server
     /// under the same name is left alone.
     pub fn unregister(&self, app: &str) -> Result<(), String> {
-        if self.registration(app) != Some(Registration::Ours) {
+        if !self.registered().is_some_and(|servers| is_any_ours(&servers, app)) {
             return Ok(());
         }
         match self.kind {
             Kind::ClaudeCode => {
+                if find_claude().is_none() {
+                    return self.edit(|text| remove_from_json(text, "mcpServers", app));
+                }
                 let removed = claude(&["mcp", "remove", "-s", "user", app])?;
                 if removed.ok {
                     Ok(())
@@ -379,8 +481,11 @@ fn claude(args: &[&str]) -> Result<proc::Output, String> {
     Ok(proc::run(&program, args))
 }
 
-fn register_in_claude_code(app: &str) -> Result<(), String> {
+fn register_in_claude_code(app: &str, command: &str, args: &[String]) -> Result<(), String> {
     let client = get(CLAUDE_CODE).expect("Claude Code is a known client");
+    if find_claude().is_none() {
+        return client.edit(|text| add_to_json_with_args(text, "mcpServers", app, command, args, true));
+    }
     match client.registered().as_ref().map(|servers| servers.get(app)) {
         Some(None) => {}
         Some(Some(existing)) => {
@@ -457,12 +562,17 @@ fn edit_json(text: &str, key: &str, change: impl FnOnce(&mut Map<String, Value>)
     Ok(out)
 }
 
+#[cfg(test)]
 fn add_to_json(text: &str, key: &str, app: &str, command: &str, typed: bool) -> Result<String, String> {
+    add_to_json_with_args(text, key, app, command, &["connect".to_string(), app.to_string()], typed)
+}
+
+fn add_to_json_with_args(text: &str, key: &str, app: &str, command: &str, args: &[String], typed: bool) -> Result<String, String> {
     edit_json(text, key, |servers| {
         let server = if typed {
-            json!({ "type": "stdio", "command": command, "args": ["connect", app] })
+            json!({ "type": "stdio", "command": command, "args": args })
         } else {
-            json!({ "command": command, "args": ["connect", app] })
+            json!({ "command": command, "args": args })
         };
         servers.insert(app.to_string(), server);
     })
@@ -502,11 +612,17 @@ fn edit_toml(text: &str, key: &str, change: impl FnOnce(&mut toml_edit::Table)) 
     Ok(doc.to_string())
 }
 
+#[cfg(test)]
 fn add_to_toml(text: &str, key: &str, app: &str, command: &str) -> Result<String, String> {
+    add_to_toml_with_args(text, key, app, command, &["connect".to_string(), app.to_string()])
+}
+
+fn add_to_toml_with_args(text: &str, key: &str, app: &str, command: &str, args_slice: &[String]) -> Result<String, String> {
     edit_toml(text, key, |servers| {
         let mut args = toml_edit::Array::new();
-        args.push("connect");
-        args.push(app);
+        for arg in args_slice {
+            args.push(arg.as_str());
+        }
         let mut server = toml_edit::Table::new();
         server.insert("command", toml_edit::value(command));
         server.insert("args", toml_edit::value(args));
@@ -573,12 +689,12 @@ impl Snapshot {
 /// The servers for these apps as text to paste into a client's settings by hand: `json` (an
 /// `mcpServers` object) or `toml` (`[mcp_servers.<app>]` tables).
 pub fn snippet(apps: &[String], format: &str) -> Result<String, String> {
-    let command = paths::hub_exe().to_string_lossy().into_owned();
     let mut text = String::new();
     for app in apps {
+        let (command, args) = target_command(app);
         text = match format {
-            "json" => add_to_json(&text, "mcpServers", app, &command, true)?,
-            "toml" => add_to_toml(&text, "mcp_servers", app, &command)?,
+            "json" => add_to_json_with_args(&text, "mcpServers", app, &command, &args, true)?,
+            "toml" => add_to_toml_with_args(&text, "mcp_servers", app, &command, &args)?,
             other => return Err(format!("`{other}` is not a format the hub writes: use json or toml.")),
         };
     }

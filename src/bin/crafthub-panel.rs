@@ -100,6 +100,7 @@ struct ClientRow {
 struct Shared {
     rows: Vec<Row>,
     clients: Vec<ClientRow>,
+    direct: bool,
     message: String,
     /// What the worker is doing right now; buttons are disabled meanwhile.
     busy: Option<String>,
@@ -129,6 +130,7 @@ enum Job {
     CheckAll,
     UpdateCatalog,
     SetClient(&'static str, bool),
+    SetMode(bool),
     Uninstall,
 }
 
@@ -160,6 +162,7 @@ fn refresh(shared: &Mutex<Shared>) {
     let mut shared = lock(shared);
     shared.rows = rows;
     shared.clients = client_rows;
+    shared.direct = hub.config.direct;
 }
 
 fn worker(shared: Arc<Mutex<Shared>>, jobs: Receiver<Job>, ctx: egui::Context) {
@@ -307,6 +310,10 @@ fn run(job: Job, shared: &Mutex<Shared>, ctx: &egui::Context) {
                 hub::disable_client(id).map(|()| format!("{client_name} disabled: the hub's servers were taken out of it."))
             }
         }
+        Job::SetMode(direct) => {
+            busy(if direct { "Switching to direct stdio mode…".to_string() } else { "Switching to shared hub mode…".to_string() });
+            hub::set_mode(direct)
+        }
     };
 
     refresh(shared);
@@ -378,14 +385,6 @@ impl Panel {
         let (jobs, queue) = mpsc::channel();
         let (for_worker, ctx) = (shared.clone(), cc.egui_ctx.clone());
         thread::spawn(move || worker(for_worker, queue, ctx));
-        // Whether a newer hub is out: asked in the background, at most once a day.
-        let (for_check, ctx) = (shared.clone(), cc.egui_ctx.clone());
-        thread::spawn(move || {
-            if let Ok(Some(newer)) = update_check::newer(false) {
-                lock(&for_check).newer = Some(newer);
-                ctx.request_repaint();
-            }
-        });
         // Used to take the pictures in the README: save one of the window and close, optionally
         // with an app's diagnosis open.
         let screenshot = std::env::var_os("CRAFTHUB_PANEL_SCREENSHOT").map(PathBuf::from);
@@ -893,11 +892,11 @@ impl Panel {
 
 impl eframe::App for Panel {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let (rows, client_rows, message, busy_text, checks) = {
+        let (rows, client_rows, direct, message, busy_text, checks) = {
             let mut shared = lock(&self.shared);
             shared.checks.retain(|_, check| check.at.elapsed() < Duration::from_secs(90));
             let checks: HashMap<String, (bool, String)> = shared.checks.iter().map(|(id, c)| (id.clone(), (c.ok, c.text.clone()))).collect();
-            (shared.rows.clone(), shared.clients.clone(), shared.message.clone(), shared.busy.clone(), checks)
+            (shared.rows.clone(), shared.clients.clone(), shared.direct, shared.message.clone(), shared.busy.clone(), checks)
         };
         let busy = busy_text.is_some();
         let new_apps = rows.iter().filter(|r| r.state.kind == StateKind::New).count();
@@ -906,7 +905,18 @@ impl eframe::App for Panel {
         let newer = if self.newer_dismissed { None } else { lock(&self.shared).newer.clone() };
         egui::TopBottomPanel::top("header").show(ctx, |ui| {
             ui.add_space(8.0);
-            ui.label(RichText::new("Craft MCP Hub").size(22.0).strong());
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("Craft MCP Hub").size(22.0).strong());
+                ui.add_space(12.0);
+                let mut is_direct = direct;
+                if ui
+                    .add_enabled(!busy, egui::Checkbox::new(&mut is_direct, "Direct stdio mode (no background daemon)"))
+                    .on_hover_text("When checked, AI clients run <app>-cli mcp directly over stdio without background servers")
+                    .clicked()
+                {
+                    self.send(Job::SetMode(is_direct));
+                }
+            });
             if let Some(newer) = &newer {
                 self.newer_notice(ui, newer);
             }

@@ -1,14 +1,14 @@
 #!/bin/sh
 # Installs craft-mcp-hub (crafthub and crafthub-panel) on macOS or Linux, or updates it.
 #
-#   curl -fsSL https://raw.githubusercontent.com/AndrianLeah/craft-mcp-hub/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/mayor686/craft-mcp-hub/main/install.sh | sh
 #
 # The programs go to ~/.local/bin (set CRAFTHUB_INSTALL_DIR for another folder). On macOS the control
 # panel is also installed as the app "Craft MCP Hub" in /Applications (or ~/Applications), where
 # Launchpad and Spotlight find it, and the programs in that folder point into it.
 set -eu
 
-REPO="AndrianLeah/craft-mcp-hub"
+REPO="mayor686/craft-mcp-hub"
 BIN_DIR="${CRAFTHUB_INSTALL_DIR:-$HOME/.local/bin}"
 
 case "$(uname -s)" in

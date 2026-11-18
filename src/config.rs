@@ -7,6 +7,10 @@ use std::fs;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
+    /// When true, AI clients are configured to launch `<app>-cli mcp` directly over stdio
+    /// without running a background `crafthub serve` TCP daemon.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub direct: bool,
     /// The AI clients apps are registered with, by id. Not set: Claude Code, as before clients
     /// could be chosen.
     #[serde(default, skip_serializing_if = "Option::is_none")]

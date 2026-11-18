@@ -1,6 +1,6 @@
 # Installs craft-mcp-hub (crafthub and crafthub-panel) on Windows, or updates it.
 #
-#   irm https://raw.githubusercontent.com/AndrianLeah/craft-mcp-hub/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/mayor686/craft-mcp-hub/main/install.ps1 | iex
 #
 # The programs go to %USERPROFILE%\.crafthub\bin (set CRAFTHUB_INSTALL_DIR for another folder),
 # which is added to your PATH, and the control panel gets a Start menu shortcut.
@@ -17,7 +17,7 @@
     throw 'craft-mcp-hub is built for 64-bit Windows only.'
   }
 
-  $repo = 'AndrianLeah/craft-mcp-hub'
+  $repo = 'mayor686/craft-mcp-hub'
   $dir = if ($env:CRAFTHUB_INSTALL_DIR) { $env:CRAFTHUB_INSTALL_DIR } else { Join-Path $env:USERPROFILE '.crafthub\bin' }
   $asset = 'crafthub-windows-x86_64.zip'
   $base = "https://github.com/$repo/releases/latest/download"
